@@ -1,0 +1,1041 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>從流程拆解到 n8n 自動化</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* ── 字級規則：舞台 1600×900，所有文字 ≥ 40px（= 舞台寬 2.5%，等同 PowerPoint 16:9 的 24pt） ── */
+:root{
+  --f:40px; --f-l:48px; --f-xl:60px; --f-h:72px; --f-hero:96px;
+  --ink:#3E3A36; --ink2:#6E675F; --line:#D8D0C5; --bg:#EEEAE4; --paper:#FAF8F5;
+  --navy:#4F5651; --blue:#9A6F63; --blue-l:#EFE4DD;
+  --trig:#A07D47; --trig-l:#F3EBDD;
+  --flow:#6A8673; --flow-l:#E5ECE6;
+  --integ:#6F8294; --integ-l:#E4E9EE;
+  --ai:#8A6F87; --ai-l:#EFE7EE;
+  --bad:#A95D53; --bad-l:#F5E5E2; --ok:#5F7F5F; --ok-l:#E6EEE4;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  --sans:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#2F2C2A;overflow:hidden}
+body{font-family:var(--sans);color:var(--ink)}
+#viewport{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+#stage{width:1600px;height:900px;background:var(--bg);position:relative;transform-origin:center center;
+  font-size:var(--f);line-height:1.35;display:flex;flex-direction:column;overflow:hidden;flex:none}
+
+/* header */
+#bar{height:92px;flex:none;display:flex;align-items:center;gap:12px;padding:0 28px;background:var(--navy);color:#fff}
+#tabs{display:flex;gap:6px;flex:1;min-width:0}
+#tabs button{font:500 var(--f)/1 var(--sans);color:#CFC6BB;background:transparent;border:0;padding:16px 18px;border-radius:14px;cursor:pointer;white-space:nowrap}
+#tabs button:hover{color:#fff;background:rgba(255,255,255,.08)}
+#tabs button.on{color:var(--navy);background:var(--paper);font-weight:700}
+#count{font:500 var(--f)/1 var(--mono);color:#CFC6BB;white-space:nowrap}
+.navbtn{font:700 var(--f)/1 var(--sans);width:72px;height:64px;border-radius:14px;border:2px solid #7A7470;background:transparent;color:#fff;cursor:pointer}
+.navbtn:hover{background:rgba(255,255,255,.1)}
+
+/* slides */
+#deck{flex:1;position:relative}
+.slide{position:absolute;inset:0;padding:44px 72px 40px;display:none;flex-direction:column;gap:28px}
+.slide.on{display:flex}
+h2{font-size:var(--f-h);font-weight:900;line-height:1.15;letter-spacing:.01em;color:var(--navy)}
+h2 .k{color:var(--blue)}
+.kicker{font-size:var(--f);font-weight:700;color:var(--blue);letter-spacing:.06em}
+.sub{color:var(--ink2)}
+.grow{flex:1;min-height:0}
+.row{display:flex;gap:28px;align-items:stretch}
+.col{display:flex;flex-direction:column;gap:20px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
+.card{background:var(--paper);border:2px solid var(--line);border-radius:24px;padding:28px 32px}
+.card h3{font-size:var(--f-l);font-weight:800;margin-bottom:12px}
+.muted{color:var(--ink2)}
+.b{font-weight:800}
+.blue{color:var(--blue)} .red{color:var(--bad)} .green{color:var(--ok)}
+code,.mono{font-family:var(--mono);font-size:var(--f)}
+.callout{background:var(--blue-l);border-left:12px solid var(--blue);border-radius:16px;padding:20px 28px;font-weight:700;color:var(--navy)}
+.callout.warn{background:var(--trig-l);border-color:var(--trig);color:#6B5229}
+ol.steps,ul.dots{list-style:none;display:flex;flex-direction:column;gap:16px}
+ol.steps{counter-reset:s}
+ol.steps li{counter-increment:s;display:flex;gap:20px;align-items:flex-start}
+ol.steps li::before{content:counter(s);flex:none;width:60px;height:60px;border-radius:50%;background:var(--navy);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+ul.dots li{padding-left:40px;position:relative}
+ul.dots li::before{content:"";position:absolute;left:6px;top:20px;width:16px;height:16px;border-radius:50%;background:var(--blue)}
+
+/* node pills */
+.pill{display:inline-flex;align-items:center;gap:12px;padding:14px 24px;border-radius:18px;font-weight:700;border:3px solid;white-space:nowrap;background:#fff}
+.pill.trig{border-color:var(--trig);background:var(--trig-l);color:#6B5229}
+.pill.flow{border-color:var(--flow);background:var(--flow-l);color:#3F5A47}
+.pill.integ{border-color:var(--integ);background:var(--integ-l);color:#3F4F61}
+.pill.ai{border-color:var(--ai);background:var(--ai-l);color:#5B4458}
+.pill.plain{border-color:var(--line);color:var(--ink)}
+.pill.bad{border-color:var(--bad);background:var(--bad-l);color:#7A3A33}
+.arrow{font-weight:900;color:#A89F94;display:flex;align-items:center}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:14px 16px}
+.legend{display:flex;gap:16px;flex-wrap:wrap}
+
+/* copy boxes */
+.copy{position:relative;background:#3B3835;color:#EFE9E1;border-radius:20px;padding:22px 28px;font-family:var(--mono);font-size:var(--f);line-height:1.35;white-space:pre-wrap;word-break:break-all;cursor:pointer;border:3px solid transparent;overflow:hidden}
+.copy:hover{border-color:#C3A99B}
+.copy .lbl{font-family:var(--sans);font-weight:700;color:#CDBFB0;display:block;margin-bottom:6px}
+.copy.clip{max-height:var(--h,260px)}
+.copy.clip::after{content:"";position:absolute;left:0;right:0;bottom:0;height:90px;background:linear-gradient(transparent,#3B3835)}
+.copytag{position:absolute;right:20px;top:16px;font-family:var(--sans);font-weight:700;color:#3B3835;background:#CDBFB0;border-radius:12px;padding:4px 16px;z-index:2}
+.btn{font:700 var(--f)/1.1 var(--sans);padding:18px 32px;border-radius:18px;border:0;background:var(--blue);color:#fff;cursor:pointer}
+.btn.ghost{background:#fff;color:var(--blue);border:3px solid var(--blue)}
+.btn:hover{filter:brightness(1.08)}
+
+/* tables */
+table.t{border-collapse:separate;border-spacing:0;width:100%;background:#fff;border:2px solid var(--line);border-radius:20px;overflow:hidden}
+table.t th,table.t td{padding:5px 22px;text-align:left;border-bottom:2px solid var(--line);vertical-align:middle}
+table.t tr:last-child td{border-bottom:0}
+table.t th{background:var(--navy);color:#fff;font-weight:700}
+table.t td.m{font-family:var(--mono)}
+tr.cp{cursor:pointer} tr.cp:hover td{background:var(--blue-l)}
+.tag{display:inline-block;padding:2px 16px;border-radius:12px;font-weight:700}
+.tag.ai{background:var(--ai-l);color:var(--ai)} .tag.sys{background:var(--flow-l);color:var(--flow)}
+
+/* reveal */
+.rv{cursor:pointer;transition:opacity .25s}
+.rv.hide .ans{visibility:hidden}
+.rv.hide{opacity:.85}
+.hint{color:var(--ink2);font-weight:500}
+
+/* checklist */
+.check li{display:flex;gap:22px;align-items:center;cursor:pointer;padding:12px 16px;border-radius:16px}
+.check li:hover{background:var(--blue-l)}
+.check li .bx{flex:none;width:52px;height:52px;border:4px solid var(--navy);border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:900;color:#fff}
+.check li.done .bx{background:var(--ok);border-color:var(--ok)}
+.check li.done .tx{color:var(--ink2);text-decoration:line-through}
+
+/* forms */
+input.in,textarea.in{font:500 var(--f)/1.3 var(--sans);color:var(--ink);background:#fff;border:3px solid var(--line);border-radius:14px;padding:8px 18px;width:100%}
+input.in:focus,textarea.in:focus{outline:none;border-color:var(--blue)}
+input.num{width:170px;text-align:center;font-family:var(--mono)}
+.form{display:grid;grid-template-columns:250px 1fr;gap:12px 20px;align-items:center}
+.form label{font-weight:700;color:var(--navy)}
+
+/* misc */
+.hero{font-size:var(--f-hero);font-weight:900;line-height:1.15;color:var(--navy)}
+.big{font-size:var(--f-xl);font-weight:800;line-height:1.25}
+.num-big{font:800 var(--f-hero)/1 var(--mono);color:var(--blue)}
+.seg{display:inline-flex;border:3px solid var(--navy);border-radius:18px;overflow:hidden}
+.seg button{font:700 var(--f)/1 var(--sans);padding:14px 30px;border:0;background:#fff;color:var(--navy);cursor:pointer}
+.seg button.on{background:var(--navy);color:#fff}
+.new{outline:4px dashed var(--ai);outline-offset:6px}
+.toast{position:absolute;left:50%;bottom:40px;transform:translateX(-50%);background:var(--ok);color:#fff;font-weight:700;padding:16px 36px;border-radius:18px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:50}
+.toast.show{opacity:1}
+a.jump{color:var(--blue);font-weight:700;cursor:pointer;text-decoration:underline;text-underline-offset:6px}
+a.pill.jump{text-decoration:none;color:inherit;justify-content:space-between}
+a.pill.jump:hover{filter:brightness(.95);transform:translateX(4px)}
+.phone{width:620px;background:#B3BDB4;border-radius:40px;padding:28px;flex:none}
+.bubble{background:#fff;border-radius:28px;padding:22px 28px;line-height:1.4}
+.cover{background:radial-gradient(1200px 700px at 85% 20%,#9A6F6333,transparent),linear-gradient(135deg,#4F5651,#2F2C2A);color:#fff;justify-content:center}
+.cover h1{font-size:110px;font-weight:900;line-height:1.1}
+.cover .kicker{color:#D9B8A8}
+.chips{display:flex;gap:16px;flex-wrap:wrap}
+.chip{border:3px solid currentColor;border-radius:999px;padding:6px 26px;font-weight:700}
+</style>
+</head>
+<body>
+<div id="viewport"><div id="stage">
+  <div id="bar">
+    <div id="tabs"></div>
+    <button class="navbtn" id="prev" aria-label="上一頁">‹</button>
+    <span id="count"></span>
+    <button class="navbtn" id="next" aria-label="下一頁">›</button>
+  </div>
+  <div id="deck">
+
+<!-- ═════════ 序 ═════════ -->
+<section class="slide cover" data-ch="序">
+  <div class="kicker">AI UNIVERSITY </div>
+  <h1>從流程拆解<br>到 n8n 自動化</h1>
+  <div class="chips" style="color:#CDBFB0;margin-top:12px"><span class="chip">拆解需求</span><span class="chip">LINE</span><span class="chip">Groq</span><span class="chip">Data Table</span></div>
+</section>
+
+<section class="slide" data-ch="序" style="justify-content:center">
+  <div class="kicker">我們在企業輔導現場的觀察</div>
+  <div class="hero">八成以上的企業課題，<br><span class="blue">自動化工作流程</span>就能解決</div>
+  <div class="g3" style="margin-top:20px">
+    <div class="card"><h3>資料搬運</h3><div class="muted">紙本抄到 Excel，<br>Excel 再貼進系統</div></div>
+    <div class="card"><h3>重複彙整</h3><div class="muted">每天同一份報表，<br>每天重做一次</div></div>
+    <div class="card"><h3>追蹤通知</h3><div class="muted">主管想知道進度，<br>只能打電話問</div></div>
+  </div>
+</section>
+
+<section class="slide" data-ch="序" style="justify-content:center">
+  <h2>AI University 的目標</h2>
+  <div class="g2 grow" style="max-height:520px">
+    <div class="card" style="border-color:var(--line);display:flex;flex-direction:column;justify-content:center">
+      <div class="kicker" style="color:var(--ink2)">不是</div>
+      <div class="big muted" style="margin-top:12px">創造獨特創新的<br>killer application</div>
+    </div>
+    <div class="card" style="border-color:var(--blue);border-width:4px;display:flex;flex-direction:column;justify-content:center">
+      <div class="kicker">而是</div>
+      <div class="big" style="margin-top:12px;color:var(--navy)">實際解決企業<br>正在面對的課題</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-ch="序">
+  <h2>先拆需求，<span class="k">再談 AI</span></h2>
+  <div class="hint">點擊每一步看重點</div>
+  <div class="col grow" style="gap:12px">
+    <div class="card rv hide row" style="align-items:center;padding:10px 28px"><span class="pill plain" style="min-width:300px">① 找問題</span><span class="ans">哪一件工作最浪費時間？先量化</span></div>
+    <div class="card rv hide row" style="align-items:center;padding:10px 28px"><span class="pill plain" style="min-width:300px">② 拆流程</span><span class="ans">觸發 → 輸入 → 判斷 → 需要 AI？→ 輸出 → 例外</span></div>
+    <div class="card rv hide row" style="align-items:center;padding:10px 28px"><span class="pill plain" style="min-width:300px">③ 最小版本</span><span class="ans">先讓最核心的一條路跑通</span></div>
+    <div class="card rv hide row" style="align-items:center;padding:10px 28px"><span class="pill ai" style="min-width:300px">④ 再加 AI</span><span class="ans">只把「讀懂」的工作交給 AI</span></div>
+  </div>
+</section>
+
+<!-- ═════════ 案例拆解 ═════════ -->
+<section class="slide" data-ch="拆解">
+  <div class="kicker">案例</div>
+  <h2>現場報工：<span class="k">從紙本走向數位</span></h2>
+  <div class="g3 grow" style="max-height:300px">
+    <div class="card" style="border-color:var(--bad)"><h3 class="red">進度晚一天</h3><div class="muted">今天的問題，<br>明天才知道</div></div>
+    <div class="card" style="border-color:var(--bad)"><h3 class="red">抄寫出錯</h3><div class="muted">字跡難辨，<br>數字容易打錯</div></div>
+    <div class="card" style="border-color:var(--bad)"><h3 class="red">追進度靠電話</h3><div class="muted">主管要一個一個問</div></div>
+  </div>
+  <div class="callout">目標：現場人員用 LINE 傳文字或照片，資料就自動進資料庫</div>
+</section>
+
+<section class="slide" data-ch="拆解">
+  <div class="kicker">① 找問題</div>
+  <h2>先算算看：<span class="k">每個月花多少時間？</span></h2>
+  <div class="card col" style="gap:16px;font-weight:500;padding:20px 32px">
+    <div class="row" style="align-items:center">每天報工單<input class="in num" id="c1" type="number" value="40" min="0">張</div>
+    <div class="row" style="align-items:center">每張輸入<input class="in num" id="c2" type="number" value="2" min="0" step="0.5">分鐘</div>
+    <div class="row" style="align-items:center">每月工作<input class="in num" id="c3" type="number" value="22" min="0">天</div>
+  </div>
+  <div class="row" style="align-items:baseline;gap:24px"><span class="big">每月花在抄寫：</span><span class="num-big" id="cOut">29.3</span><span class="big">小時</span></div>
+  <div class="callout">這個數字，就是導入後要追蹤的成效指標</div>
+</section>
+
+<section class="slide" data-ch="拆解" style="gap:18px">
+  <div class="kicker">② 拆流程</div>
+  <h2>拆解報工流程：<span class="k">現行 → 新</span></h2>
+  <table class="t" id="breakdown">
+    <tr><th style="width:290px">拆解項目</th><th>現行流程</th><th style="background:var(--blue)">新報工流程</th></tr>
+    <tr class="rv hide"><td class="b">觸發</td><td class="muted">下班前填紙本報工單</td><td class="ans">傳 LINE 文字或照片</td></tr>
+    <tr class="rv hide"><td class="b">輸入</td><td class="muted">手寫的工單號與數量</td><td class="ans">文字訊息或報工單照片</td></tr>
+    <tr class="rv hide"><td class="b">判斷</td><td class="muted">助理核對字跡與工單</td><td class="ans">自動判斷文字或圖片</td></tr>
+    <tr class="rv hide"><td class="b">需要 AI？</td><td class="muted">否，靠人讀、人打字</td><td class="ans">是，AI 讀懂並抽出欄位</td></tr>
+    <tr class="rv hide"><td class="b">輸出</td><td class="muted">隔天才輸入 Excel</td><td class="ans">即時寫入資料表並回覆</td></tr>
+    <tr class="rv hide"><td class="b">例外</td><td class="muted">看不懂就打電話問</td><td class="ans">缺工單號，請對方補傳</td></tr>
+  </table>
+  <div class="callout">點擊每一列：現行流程的每一格，在新流程換成什麼？</div>
+</section>
+
+<section class="slide" data-ch="拆解" style="gap:18px">
+  <h2>先決定<span class="k">資料長什麼樣</span></h2>
+  <div class="g2" id="schema">
+    <div class="col" style="gap:12px">
+      <div class="b" style="color:var(--ai)">AI 負責讀懂</div>
+      <table class="t">
+        <tr><th>欄位</th><th>意義</th><th>型別</th></tr>
+        <tr><td class="m">wo_no</td><td>工單號</td><td class="m">string</td></tr>
+        <tr><td class="m">process</td><td>工序</td><td class="m">string</td></tr>
+        <tr><td class="m">good_qty</td><td>良品數</td><td class="m">number</td></tr>
+        <tr><td class="m">ng_qty</td><td>不良數</td><td class="m">number</td></tr>
+        <tr><td class="m">ng_reason</td><td>不良原因</td><td class="m">string</td></tr>
+        <tr><td class="m">reporter</td><td>報工人</td><td class="m">string</td></tr>
+      </table>
+    </div>
+    <div class="col" style="gap:12px">
+      <div class="b" style="color:var(--flow)">流程負責填（皆為 string）</div>
+      <table class="t">
+        <tr><th>欄位</th><th>意義</th></tr>
+        <tr><td class="m">work_date</td><td>報工日期</td></tr>
+        <tr><td class="m">line_user_id</td><td>LINE ID</td></tr>
+        <tr><td class="m">source</td><td>文字或圖片</td></tr>
+      </table>
+      <div class="callout" style="margin-top:auto">能確定的資訊交給流程，<br>AI 只負責讀懂</div>
+    </div>
+  </div>
+  <div class="callout warn">wo_no 是實作二和訂單對帳的鑰匙</div>
+</section>
+
+<section class="slide" data-ch="拆解">
+  <div class="kicker">③ 最小版本 → ④ 再加 AI</div>
+  <div class="row" style="align-items:center;justify-content:space-between">
+    <h2>一步一步長大</h2>
+    <div class="seg" id="verSeg"><button data-v="1" class="on">v1 最小版本</button><button data-v="2">v2 再加能力</button></div>
+  </div>
+  <div class="col grow" id="verBox" style="gap:20px">
+    <div class="chain">
+      <span class="pill trig">LINE 收到文字</span><span class="arrow">→</span>
+      <span class="pill ai">AI 抽成 JSON</span><span class="arrow">→</span>
+      <span class="pill integ">寫入報工紀錄</span><span class="arrow">→</span>
+      <span class="pill integ">回覆已登錄</span>
+    </div>
+    <div class="col v2" style="gap:20px;display:none">
+      <div class="chain"><span class="pill flow new">判斷：文字 or 圖片</span></div>
+      <div class="chain"><span class="pill integ new">圖片：向 LINE 取回圖片</span><span class="arrow">→</span><span class="pill ai new">AI 看圖轉文字</span><span class="arrow">→</span><span class="pill plain">併回 AI 抽成 JSON</span></div>
+      <div class="chain"><span class="pill flow new">沒有工單號？</span><span class="arrow">→</span><span class="pill integ new">回覆：請補上重傳</span></div>
+    </div>
+    <div class="callout v1n">v1 先確定每個人都跑得通，再往上加</div>
+  </div>
+</section>
+
+<!-- ═════════ n8n 節點 ═════════ -->
+<section class="slide" data-ch="n8n 節點">
+  <div class="row" style="justify-content:space-between;align-items:flex-end">
+    <h2>n8n 節點的<span class="k">三大類</span></h2>
+    <span class="hint">點節點，跳到用到它的步驟</span>
+  </div>
+  <div class="g3 grow">
+    <div class="card col" style="border-color:var(--trig);border-width:4px">
+      <h3 style="color:var(--trig)">觸發 Trigger</h3>
+      <div class="muted">流程什麼時候開始</div>
+      <a class="pill trig jump" data-go="s-webhook">Webhook →</a>
+      <a class="pill trig jump" data-go="s-ref2">Schedule →</a>
+    </div>
+    <div class="card col" style="border-color:var(--flow);border-width:4px">
+      <h3 style="color:var(--flow)">條件判斷</h3>
+      <div class="muted">資料要往哪條路走</div>
+      <a class="pill flow jump" data-go="s-if">If　兩條路 →</a>
+      <a class="pill flow jump" data-go="s-switch">Switch　多條路 →</a>
+    </div>
+    <div class="card col" style="border-color:var(--integ);border-width:4px">
+      <h3 style="color:var(--integ)">系統整合</h3>
+      <div class="muted">跟外部系統拿資料、送資料</div>
+      <a class="pill integ jump" data-go="s-img">HTTP Request →</a>
+      <a class="pill integ jump" data-go="s-dt">Data Table →</a>
+    </div>
+  </div>
+  <div class="row" style="align-items:center;gap:20px"><span class="pill ai">AI 節點</span><span class="muted">是第四種：負責讀懂、摘要、轉成結構化資料</span></div>
+</section>
+
+<section class="slide" data-ch="n8n 節點">
+  <h2>節點之間傳的是 <span class="k">JSON</span></h2>
+  <div class="g2 grow">
+    <div class="col">
+      <div class="b">LINE 送進來的資料（節錄）</div>
+      <div class="copy" style="cursor:default">"events": [{
+  "message": {
+    "type": "text",
+    "text": "WO-003 完成120件"
+} }]</div>
+    </div>
+    <div class="col">
+      <div class="b">用 Expression 把值拿出來</div>
+      <div class="card col" style="gap:10px">
+        <code class="blue">{{ $json.欄位 }}</code><div class="muted">拿上一個節點的值</div>
+        <code class="blue" style="margin-top:14px">{{ $('節點名').item.json.欄位 }}</code><div class="muted">回頭拿指定節點的值</div>
+      </div>
+    </div>
+  </div>
+  <div class="callout">技巧：直接把左側欄位拖進參數框，n8n 會自動寫好 Expression</div>
+</section>
+
+<!-- ═════════ 實作一 ═════════ -->
+<section class="slide" data-ch="實作一">
+  <h2>開工前檢查</h2>
+  <ul class="check col" data-key="pre1" style="gap:10px">
+    <li><span class="bx">✓</span><span class="tx">登入 learning.n8n.tw，新增一個空白工作流</span></li>
+    <li><span class="bx">✓</span><span class="tx">建立 <a class="jump" data-go="s-cred-line">LINE</a> 與 <a class="jump" data-go="s-cred-groq">Groq</a> 憑證</span></li>
+    <li><span class="bx">✓</span><span class="tx">匯入 報工紀錄.csv 建立 Data Table（欄位同 <a class="jump" data-go="s-schema">欄位表</a>）</span></li>
+    <li><span class="bx">✓</span><span class="tx">手機已加入自己的 LINE 官方帳號好友</span></li>
+  </ul>
+  <div class="row" style="align-items:center;gap:24px"><button class="btn" id="dlReport">下載 報工紀錄.csv</button><span class="b red">匯入時 work_date 型別改選 string</span></div>
+  <div class="callout warn">平台是大家共用的：Data Table 名稱與 Webhook 路徑請加上自己的英文全名</div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-cred-line">
+  <div class="kicker">憑證 1／2</div>
+  <h2>建立 <span class="k">LINE</span> 憑證</h2>
+  <div class="g2 grow">
+    <div class="col">
+      <div class="b">到 LINE Developers 拿 Token</div>
+      <ol class="steps">
+        <li>進入你的 Channel</li>
+        <li>切到 Messaging API 分頁</li>
+        <li>Channel access token 按 Issue</li>
+        <li>複製整串 Token</li>
+      </ol>
+    </div>
+    <div class="col">
+      <div class="b">到 n8n 建立憑證</div>
+      <div>左上 ＋ → Credential，搜尋 <span class="b blue">Header Auth</span></div>
+      <table class="t">
+        <tr><td class="b" style="width:200px;white-space:nowrap">名稱</td><td class="m">LINE Bot</td></tr>
+        <tr class="cp" data-copytext="Authorization"><td class="b">Name</td><td class="m">Authorization</td></tr>
+        <tr class="cp" data-copytext="Bearer "><td class="b">Value</td><td class="m">Bearer 你的Token</td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="callout warn">Bearer 和 Token 之間要有一個空格</div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-cred-groq">
+  <div class="kicker">憑證 2／2</div>
+  <h2>建立 <span class="k">Groq</span> 憑證</h2>
+  <div class="g2 grow">
+    <div class="col">
+      <div class="b">到 Groq Console 拿 API Key</div>
+      <ol class="steps">
+        <li>登入 console.groq.com</li>
+        <li>左側選 API Keys</li>
+        <li>按 Create API Key</li>
+        <li>立刻複製（只會顯示一次）</li>
+      </ol>
+    </div>
+    <div class="col">
+      <div class="b">到 n8n 建立憑證</div>
+      <div>左上 ＋ → Credential，搜尋 <span class="b blue">Groq</span></div>
+      <table class="t">
+        <tr><td class="b" style="width:200px;white-space:nowrap">名稱</td><td class="m">Groq account</td></tr>
+        <tr><td class="b" style="white-space:nowrap">API Key</td><td>貼上剛剛的 Key</td></tr>
+      </table>
+      <div>按 Save，出現連線成功就完成</div>
+    </div>
+  </div>
+  <div class="callout">名稱照抄：匯入參考工作流時，n8n 會自動對上這兩個憑證</div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-webhook">
+  <div class="kicker">步驟 1／8　<span class="pill trig" style="padding:4px 18px">觸發</span></div>
+  <h2>接收 LINE 訊息：Webhook</h2>
+  <div class="g2 grow">
+    <ol class="steps">
+      <li>新增 Webhook 節點</li>
+      <li>HTTP Method 選 POST</li>
+      <li>Path 填 <code class="blue">report-英文全名</code>，例如 <code class="blue">report-wangxiaoming</code></li>
+      <li>Respond 選 Immediately</li>
+    </ol>
+    <div class="col">
+      <div class="card col" style="gap:12px">
+        <h3>到 LINE Developers</h3>
+        <div>Webhook URL 貼上 n8n 的 Production URL</div>
+        <div>打開 Use webhook</div>
+      </div>
+      <div class="callout warn">用 Production URL 時，工作流要按 Publish 才收得到</div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-ch="實作一">
+  <div class="kicker">步驟 2／8</div>
+  <h2>取出需要的欄位：Edit Fields</h2>
+  <div>節點命名為 <span class="b blue">取出欄位</span>，新增 5 個欄位<span class="hint">（點擊整列複製）</span></div>
+  <table class="t">
+    <tr><th style="width:280px">Name</th><th>Value</th></tr>
+    <tr class="cp" data-copytext="{{ $json.body.events[0].message.type }}"><td class="m">msg_type</td><td class="m">{{ $json.body.events[0].message.type }}</td></tr>
+    <tr class="cp" data-copytext="{{ $json.body.events[0].message.text }}"><td class="m">text</td><td class="m">{{ $json.body.events[0].message.text }}</td></tr>
+    <tr class="cp" data-copytext="{{ $json.body.events[0].message.id }}"><td class="m">message_id</td><td class="m">{{ $json.body.events[0].message.id }}</td></tr>
+    <tr class="cp" data-copytext="{{ $json.body.events[0].source.userId }}"><td class="m">user_id</td><td class="m">{{ $json.body.events[0].source.userId }}</td></tr>
+    <tr class="cp" data-copytext="{{ $json.body.events[0].replyToken }}"><td class="m">reply_token</td><td class="m">{{ $json.body.events[0].replyToken }}</td></tr>
+  </table>
+</section>
+
+<section class="slide" data-ch="實作一">
+  <div class="kicker">步驟 3／8　<span class="pill ai" style="padding:4px 18px">AI</span></div>
+  <h2>AI 結構化：Basic LLM Chain</h2>
+  <div class="g2 grow">
+    <div class="col">
+      <ol class="steps">
+        <li>節點命名 <span class="b blue">AI 結構化</span>，貼上 Prompt</li>
+        <li>Chat Model 選 Groq：<code class="blue" data-cfg="textModel"></code></li>
+        <li>打開 Require Specific Output Format，接上 Structured Output Parser，貼上 JSON 範例</li>
+      </ol>
+    </div>
+    <div class="col">
+      <div class="copy clip" data-copy="prompt1" style="--h:260px"><span class="copytag">複製</span><span class="lbl">Prompt</span></div>
+      <div class="copy clip" data-copy="schema1" style="--h:210px"><span class="copytag">複製</span><span class="lbl">JSON 範例</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-dt">
+  <div class="kicker">步驟 4／8　<span class="pill integ" style="padding:4px 18px">系統整合</span></div>
+  <h2>寫入報工紀錄：Data Table</h2>
+  <div>Operation 選 Insert row，Data Table 選「報工紀錄」<span class="hint">（點擊整列複製）</span></div>
+  <table class="t">
+    <tr><th style="width:280px">欄位</th><th>Value</th></tr>
+    <tr class="cp" data-copytext="{{ $now.format('yyyy-MM-dd') }}"><td class="m">work_date</td><td class="m">{{ $now.format('yyyy-MM-dd') }}</td></tr>
+    <tr class="cp" data-copytext="{{ $json.output.wo_no }}"><td class="m">wo_no …</td><td class="m">{{ $json.output.wo_no }}</td></tr>
+    <tr class="cp" data-copytext="{{ $('取出欄位').item.json.user_id }}"><td class="m">line_user_id</td><td class="m">{{ $('取出欄位').item.json.user_id }}</td></tr>
+    <tr class="cp" data-copytext="{{ $('取出欄位').item.json.msg_type }}"><td class="m">source</td><td class="m">{{ $('取出欄位').item.json.msg_type }}</td></tr>
+  </table>
+  <div class="callout">AI 欄位都在 <code>output</code> 底下，其餘 5 個照 wo_no 類推</div>
+</section>
+
+<section class="slide" data-ch="實作一">
+  <div class="kicker">步驟 5／8　<span class="pill integ" style="padding:4px 18px">系統整合</span></div>
+  <h2>回覆「已登錄」：HTTP Request</h2>
+  <div class="g2 grow">
+    <ol class="steps">
+      <li>Method 選 POST</li>
+      <li>URL 貼上回覆 API</li>
+      <li>Authentication 沿用 LINE 憑證</li>
+      <li>Send Body 選 JSON，貼上內容</li>
+    </ol>
+    <div class="col">
+      <div class="copy" data-copy="replyUrl"><span class="copytag">複製</span><span class="lbl">URL</span></div>
+      <div class="copy clip" data-copy="reply1" style="--h:260px"><span class="copytag">複製</span><span class="lbl">Body</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="slide" data-ch="實作一">
+  <div class="kicker">v1 完成</div>
+  <h2>用手機傳這三則訊息</h2>
+  <div class="hint">點擊複製，再貼到 LINE 傳給官方帳號</div>
+  <div class="col" style="gap:16px">
+    <div class="copy" data-copy="msgA"><span class="copytag">複製</span></div>
+    <div class="copy" data-copy="msgB"><span class="copytag">複製</span></div>
+    <div class="copy" data-copy="msgC"><span class="copytag">複製</span></div>
+  </div>
+  <div class="callout">Data Table 多了幾列？第三則發生了什麼事？</div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-switch">
+  <div class="kicker">步驟 6／8　<span class="pill flow" style="padding:4px 18px">條件判斷</span></div>
+  <h2>文字還是圖片：Switch</h2>
+  <div class="chain"><span class="pill plain">取出欄位</span><span class="arrow">→</span><span class="pill flow new">Switch</span><span class="arrow">→</span><span class="pill plain">AI 結構化</span></div>
+  <table class="t">
+    <tr><th>條件</th><th style="width:330px">輸出名稱</th><th>接到</th></tr>
+    <tr><td class="m">{{ $json.msg_type }} = text</td><td class="b">文字</td><td>AI 結構化</td></tr>
+    <tr><td class="m">{{ $json.msg_type }} = image</td><td class="b">圖片</td><td>下一步</td></tr>
+  </table>
+  <div class="callout">打開 Rename Output，替每條路取名字，畫布會清楚很多</div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-img" style="gap:20px">
+  <div class="kicker">步驟 7／8　<span class="pill integ" style="padding:4px 18px">系統整合</span> <span class="pill ai" style="padding:4px 18px">AI</span></div>
+  <h2>取回圖片，交給 AI 看</h2>
+  <div class="g2 grow">
+    <div class="col">
+      <div class="b">HTTP Request：GET</div>
+      <div class="copy" data-copy="imgUrl"><span class="copytag">複製</span><span class="lbl">URL</span></div>
+      <div>Response Format 選 <span class="b blue">File</span></div>
+    </div>
+    <div class="col">
+      <div class="b">Basic LLM Chain：<span class="blue">AI 看圖</span></div>
+      <code class="blue" data-cfg="visionModel"></code>
+      <div>User Message 選 Image (Binary)</div>
+      <div class="copy clip" data-copy="vision" style="--h:150px"><span class="copytag">複製</span><span class="lbl">Prompt</span></div>
+    </div>
+  </div>
+  <div class="callout">AI 看圖的輸出也叫 <code>text</code>，直接接回「AI 結構化」</div>
+</section>
+
+<section class="slide" data-ch="實作一" id="s-if" style="gap:18px">
+  <div class="kicker">步驟 8／8　<span class="pill flow" style="padding:4px 18px">條件判斷</span></div>
+  <h2>沒有工單號怎麼辦：If</h2>
+  <div class="row" style="align-items:center;gap:16px"><span class="pill ai">AI 結構化</span><span class="arrow">→</span><span class="pill flow new">If</span><div class="copy" data-copytext="{{ $json.output.wo_no }}" style="flex:1;padding:12px 24px"><span class="copytag" style="top:10px">複製</span>{{ $json.output.wo_no }} is empty</div></div>
+  <div class="g2">
+    <div class="card col" style="border-color:var(--bad);gap:12px"><h3 class="red">true</h3><div>HTTP Request 回覆</div><div class="copy clip" data-copy="reply2" style="--h:250px"><span class="copytag">複製</span><span class="lbl">Body</span></div></div>
+    <div class="card col" style="border-color:var(--ok);gap:12px"><h3 class="green">false</h3><div>接回 Data Table 寫入</div><div>再回覆「已登錄」</div></div>
+  </div>
+</section>
+
+<section class="slide" data-ch="實作一">
+  <div class="kicker">v2 完成</div>
+  <h2>傳一張<span class="k">報工單照片</span>試試</h2>
+  <div class="row grow">
+    <canvas id="sheet" width="1200" height="860" style="width:690px;height:495px;border-radius:20px;border:2px solid var(--line);background:#fff;flex:none"></canvas>
+    <div class="col">
+      <button class="btn" id="dlSheet">下載報工單圖片</button>
+      <ol class="steps">
+        <li>傳到手機（或直接拍螢幕）</li>
+        <li>用 LINE 傳給官方帳號</li>
+        <li>確認 source 是 image</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ AI 產生流程 ═════════ -->
+<section class="slide" data-ch="AI 產生">
+  <h2>拆解表，<span class="k">就是 Prompt 的主體</span></h2>
+  <div class="chain" style="margin-top:20px">
+    <span class="pill plain">拆解表</span><span class="arrow">→</span>
+    <span class="pill ai">Prompt</span><span class="arrow">→</span>
+    <span class="pill ai">ChatGPT／Claude／Gemini</span>
+  </div>
+  <div class="chain">
+    <span class="arrow">→</span><span class="pill plain">workflow JSON</span><span class="arrow">→</span>
+    <span class="pill integ">貼到 n8n</span><span class="arrow">→</span>
+    <span class="pill flow">測試與修正</span>
+  </div>
+  <div class="hero" style="font-size:var(--f-xl);margin-top:30px">拆得越清楚，<span class="blue">AI 產得越準</span></div>
+  <div class="muted">不會寫程式沒關係，會拆流程就夠了</div>
+</section>
+
+<section class="slide" data-ch="AI 產生">
+  <h2>好 Prompt 的<span class="k">五個區塊</span></h2>
+  <div class="hint">點擊每一塊看它為什麼重要</div>
+  <table class="t">
+    <tr class="rv hide"><td class="b" style="width:280px">角色</td><td class="ans">你是 n8n 工作流設計專家</td></tr>
+    <tr class="rv hide"><td class="b">環境</td><td class="ans">n8n 版本、用 Groq、用 Data Table、憑證名稱</td></tr>
+    <tr class="rv hide"><td class="b">需求拆解</td><td class="ans">觸發／輸入／判斷／需要 AI？／輸出／例外</td></tr>
+    <tr class="rv hide"><td class="b">限制</td><td class="ans">只用內建節點、數字由節點算、不放金鑰</td></tr>
+    <tr class="rv hide"><td class="b">輸出格式</td><td class="ans">節點說明 + 完整 JSON + 手動設定清單</td></tr>
+  </table>
+  <div class="callout">少了「環境」，AI 會用它熟悉的舊版節點，匯入後一片紅</div>
+</section>
+
+<section class="slide" data-ch="AI 產生">
+  <h2>最強的提示：<span class="k">附上你跑得通的範例</span></h2>
+  <ol class="steps">
+    <li>打開實作一的工作流</li>
+    <li>畫布上按 Ctrl + A 全選，再按 Ctrl + C</li>
+    <li>貼在 Prompt 最後面，一起交給 AI</li>
+  </ol>
+  <div class="card"><span class="b">為什麼有效：</span>AI 會照抄你的節點版本、憑證寫法、欄位命名</div>
+  <div class="callout warn">貼出去之前看一眼：節點裡有沒有直接寫死的 Token</div>
+</section>
+
+<section class="slide" data-ch="AI 產生" id="s-gen1">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <h2>Prompt 產生器 <span class="k">1／2</span></h2>
+    <div class="row" style="gap:14px"><button class="btn ghost" id="genSample">載入參考答案</button><button class="btn ghost" id="genClear">清空</button></div>
+  </div>
+  <div class="form">
+    <label>目的</label><input class="in" data-g="goal" placeholder="這個流程要解決什麼事？">
+    <label>觸發</label><input class="in" data-g="trigger" placeholder="什麼時候開始？">
+    <label>輸入</label><input class="in" data-g="input" placeholder="資料從哪裡來？">
+    <label>判斷計算</label><input class="in" data-g="logic" placeholder="依什麼規則分流或計算？">
+    <label>需要 AI？</label><input class="in" data-g="ai" placeholder="哪一步需要讀懂或寫文字？">
+    <label>輸出</label><input class="in" data-g="output" placeholder="結果送到哪裡？">
+    <label>例外</label><input class="in" data-g="edge" placeholder="出狀況時怎麼辦？">
+  </div>
+</section>
+
+<section class="slide" data-ch="AI 產生" style="gap:20px">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <h2>Prompt 產生器 <span class="k">2／2</span></h2>
+    <button class="btn" id="genCopy">複製完整 Prompt</button>
+  </div>
+  <div class="form" style="grid-template-columns:250px 1fr">
+    <label>資料表</label><textarea class="in" data-g="tables" rows="2" placeholder="Data Table 名稱：欄位1, 欄位2…（一行一張表）"></textarea>
+    <label>LINE 憑證</label><input class="in" data-g="cred" placeholder="例如 LINE Bot">
+    <label>附上範例</label><label style="font-weight:500;display:flex;gap:16px;align-items:center;cursor:pointer"><input type="checkbox" data-g="example" style="width:40px;height:40px"> 我會在最後貼上實作一的 JSON</label>
+  </div>
+  <div class="copy grow" id="genOut" style="white-space:pre-wrap;overflow:auto;cursor:text;font-family:var(--sans)"></div>
+</section>
+
+<section class="slide" data-ch="AI 產生">
+  <h2>匯入之後：<span class="k">修正迴圈</span></h2>
+  <div class="g2 grow">
+    <ol class="steps">
+      <li>在 n8n 畫布按 Ctrl + V 貼上</li>
+      <li>重新選擇憑證與 Data Table</li>
+      <li>一個節點一個節點 Execute step</li>
+      <li>出錯 → 錯誤訊息貼回給 AI</li>
+      <li>重複，直到全部變綠</li>
+    </ol>
+    <div class="col">
+      <div class="b">常見狀況</div>
+      <div class="card"><span class="b red">節點出現問號</span><br>AI 用了不存在的節點版本</div>
+      <div class="card"><span class="b red">欄位都是空的</span><br>欄位名稱和資料表不一致</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════ 實作二 ═════════ -->
+<section class="slide" data-ch="實作二">
+  <div class="kicker">案例演練</div>
+  <h2>16:30 下班前，<span class="k">生產日報自動推播</span></h2>
+  <div class="row grow">
+    <div class="col" style="flex:1">
+      <ul class="dots">
+        <li>工廠朝九晚五，16:30 前要掌握當日產出</li>
+        <li>把實作一的報工紀錄和訂單對起來</li>
+        <li>推播到主管的個人 LINE</li>
+      </ul>
+      <div class="callout" style="margin-top:auto">數字由流程算，文字由 AI 寫</div>
+    </div>
+    <div class="phone"><div class="bubble" id="mock"></div></div>
+  </div>
+</section>
+
+<section class="slide" data-ch="實作二">
+  <h2>準備訂單資料</h2>
+  <div class="row" style="align-items:center;gap:24px"><button class="btn" id="dlCsv">下載 訂單.csv</button><span class="muted">交期會依今天日期自動產生</span></div>
+  <ol class="steps">
+    <li>Data tables 分頁 → Create Data table</li>
+    <li>選 Import CSV，上傳 訂單.csv</li>
+    <li>名稱：訂單-英文全名</li>
+  </ol>
+  <table class="t" id="orderPreview"></table>
+</section>
+
+<section class="slide" data-ch="實作二">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <h2>演練時間</h2>
+    <div class="row" style="align-items:center;gap:16px"><span class="num-big" id="tm" style="font-size:var(--f-xl)">45:00</span><button class="btn ghost" id="tmBtn">開始</button></div>
+  </div>
+  <ul class="check col" data-key="ex2" style="gap:6px">
+    <li><span class="bx">✓</span><span class="tx">在 <a class="jump" data-go="s-gen1">Prompt 產生器</a> 填好拆解表</span></li>
+    <li><span class="bx">✓</span><span class="tx">複製 Prompt + 實作一 JSON，交給 AI</span></li>
+    <li><span class="bx">✓</span><span class="tx">把 AI 給的 JSON 貼到 n8n</span></li>
+    <li><span class="bx">✓</span><span class="tx">換憑證、換資料表，逐節點測試</span></li>
+    <li><span class="bx">✓</span><span class="tx">手動執行，手機收到日報</span></li>
+    <li><span class="bx">✓</span><span class="tx">按 Publish 上線</span></li>
+  </ul>
+</section>
+
+<section class="slide" data-ch="實作二" id="s-ref2">
+  <div class="kicker">參考解法</div>
+  <h2>一條可行的工作流</h2>
+  <div class="chain"><span class="pill trig">Schedule 16:30</span><span class="arrow">→</span><span class="pill integ">讀今天的報工</span><span class="arrow">→</span><span class="pill flow">依工單加總</span></div>
+  <div class="chain"><span class="arrow">→</span><span class="pill flow">合併訂單</span><span class="muted">（Merge，依 wo_no 對應）</span></div>
+  <div class="chain"><span class="arrow">→</span><span class="pill flow">算不良率</span><span class="arrow">→</span><span class="pill flow">彙整成一份</span><span class="arrow">→</span><span class="pill ai">AI 寫摘要</span><span class="arrow">→</span><span class="pill integ">LINE 推播</span></div>
+  <div class="legend" style="margin-top:auto"><span class="pill trig">觸發</span><span class="pill flow">判斷與處理</span><span class="pill integ">系統整合</span><span class="pill ai">AI</span></div>
+</section>
+
+<section class="slide" data-ch="實作二" style="gap:20px">
+  <h2>實作二的<span class="k">關鍵設定</span></h2>
+  <table class="t">
+    <tr><td class="b" style="width:300px">排程</td><td>週一至週五 16:30；Settings 的 Timezone 設為 Asia/Taipei</td></tr>
+    <tr><td class="b">讀今天</td><td class="m">work_date = {{ $now.format('yyyy-MM-dd') }}</td></tr>
+    <tr><td class="b">沒報工</td><td>讀取節點打開 Always Output Data，再用 If 判斷</td></tr>
+    <tr><td class="b">推播對象</td><td>to 填自己的 line_user_id（從報工紀錄複製）</td></tr>
+  </table>
+  <div class="copy" data-copy="pushUrl"><span class="copytag">複製</span><span class="lbl">Push API</span></div>
+  <div class="callout warn">推播會用掉官方帳號每月的免費訊息額度，測試時別連按</div>
+</section>
+
+<!-- ═════════ 總結 ═════════ -->
+<section class="slide" data-ch="總結">
+  <h2>回到你的企業：<span class="k">第一個最小版本是什麼？</span></h2>
+  <div class="g3 grow" style="max-height:300px">
+    <div class="card col"><div class="num-big" style="font-size:var(--f-xl)">1</div><div class="big" style="font-size:var(--f-l)">哪件事<br>每天重複在做？</div></div>
+    <div class="card col"><div class="num-big" style="font-size:var(--f-xl)">2</div><div class="big" style="font-size:var(--f-l)">資料<br>從哪裡來？</div></div>
+    <div class="card col"><div class="num-big" style="font-size:var(--f-xl)">3</div><div class="big" style="font-size:var(--f-l)">誰需要<br>知道結果？</div></div>
+  </div>
+  <div class="callout">答得出這三題，就能填出你的第一張拆解表</div>
+</section>
+
+<section class="slide cover" data-ch="總結">
+  <div class="kicker">今天完成的事</div>
+  <div class="col" style="gap:26px;margin-top:10px">
+    <div class="big"><span style="color:#D9B8A8">實作一</span>　資料進得來：報工數位化</div>
+    <div class="big"><span style="color:#CDB3C9">AI 產生</span>　不寫程式，也能擴充流程</div>
+    <div class="big"><span style="color:#B5CDB9">實作二</span>　結果送得出去：日報自動化</div>
+  </div>
+  <div class="big" style="margin-top:40px;color:#E4DCD2">先拆需求，再談 AI。</div>
+</section>
+
+  </div>
+  <div class="toast" id="toast">已複製</div>
+</div></div>
+
+<script>
+/* ===== 課程設定：上課前在這裡確認模型名稱 ===== */
+const CONFIG = {
+  textModel: "openai/gpt-oss-20b",
+  visionModel: "qwen/qwen3.8-27b"
+};
+
+const COPY = {
+  prompt1:
+`你是工廠的報工助理。請從下面的現場報工內容中抽出資訊。
+規則：
+- 數量一律轉成數字，沒提到不良就填 0
+- 找不到工單號時，wo_no 填空字串
+- 不要猜測內容裡沒有的資訊
+
+報工內容：
+{{ $json.text }}`,
+  schema1:
+`{
+  "wo_no": "WO-2410-003",
+  "process": "CNC加工",
+  "good_qty": 120,
+  "ng_qty": 3,
+  "ng_reason": "刮傷",
+  "reporter": "阿明"
+}`,
+  replyUrl: "https://api.line.me/v2/bot/message/reply",
+  reply1:
+`{
+  "replyToken": "{{ $('取出欄位').item.json.reply_token }}",
+  "messages": [{
+    "type": "text",
+    "text": "已登錄 {{ $('AI 結構化').item.json.output.wo_no }}，良品 {{ $('AI 結構化').item.json.output.good_qty }}"
+  }]
+}`,
+  reply2:
+`{
+  "replyToken": "{{ $('取出欄位').item.json.reply_token }}",
+  "messages": [{
+    "type": "text",
+    "text": "找不到工單號，請補上後重傳"
+  }]
+}`,
+  msgA: "WO-2410-003 CNC加工 完成120件 不良3件 刮傷 報工人阿明",
+  msgB: "今天沖壓 WO-2410-001 做了480個，有12個毛邊，小華報工",
+  msgC: "組裝完成300pcs，沒有不良",
+  imgUrl: "https://api-data.line.me/v2/bot/message/{{ $json.message_id }}/content",
+  vision:
+`這是一張生產報工單的照片。請把單上的內容逐項轉成文字：工單號、工序、良品數、不良數、不良原因、報工人。看不清楚的字請寫「無法辨識」，不要猜測。`,
+  pushUrl: "https://api.line.me/v2/bot/message/push"
+};
+
+const ORDERS = [
+  ["WO-2410-001","宏達機械","PN-A100","馬達外殼",1000,2],
+  ["WO-2410-002","宏達機械","PN-A220","散熱片",800,5],
+  ["WO-2410-003","聯成精密","PN-B310","齒輪座",500,3],
+  ["WO-2410-004","聯成精密","PN-B405","軸承蓋",1200,8],
+  ["WO-2410-005","永豐電機","PN-C120","控制箱鈑金",600,1],
+  ["WO-2410-006","永豐電機","PN-C330","端子座",2000,10]
+];
+
+const GEN_SAMPLE = {
+  goal:"每天下班前，把今天的報工和訂單對起來，推播生產日報到我的 LINE",
+  trigger:"週一到週五 16:30 定時執行",
+  input:"Data Table「報工紀錄」中今天的資料，以及 Data Table「訂單」",
+  logic:"依工單號加總良品數與不良數，對應訂單數量與交期，計算不良率",
+  ai:"依計算結果寫 5 行內的重點，標出不良率超過 3% 或交期 3 天內的工單",
+  output:"用 LINE Push 推播到我的個人 LINE（userId：請填入你的 line_user_id）",
+  edge:"今天沒有任何報工時，仍推播「今日無報工紀錄」",
+  tables:"報工紀錄：work_date, wo_no, process, good_qty, ng_qty, ng_reason, reporter, line_user_id, source\n訂單：wo_no, customer, part_no, part_name, order_qty, due_date",
+  cred:"LINE Bot",
+  example:true
+};
+
+/* ===== storage (best effort) ===== */
+const store = {
+  get(k,d){ try{ const v=localStorage.getItem("n8nwf:"+k); return v==null?d:JSON.parse(v);}catch(e){return d;} },
+  set(k,v){ try{ localStorage.setItem("n8nwf:"+k,JSON.stringify(v)); }catch(e){} }
+};
+
+/* ===== deck ===== */
+const stage=document.getElementById("stage");
+const slides=[...document.querySelectorAll(".slide")];
+const chapters=[...new Set(slides.map(s=>s.dataset.ch))];
+const tabs=document.getElementById("tabs");
+let cur=0;
+chapters.forEach(ch=>{
+  const b=document.createElement("button"); b.textContent=ch;
+  b.onclick=()=>go(slides.findIndex(s=>s.dataset.ch===ch));
+  tabs.appendChild(b);
+});
+function go(i){
+  cur=Math.max(0,Math.min(slides.length-1,i));
+  slides.forEach((s,j)=>s.classList.toggle("on",j===cur));
+  const ch=slides[cur].dataset.ch;
+  [...tabs.children].forEach(b=>b.classList.toggle("on",b.textContent===ch));
+  document.getElementById("count").textContent=(cur+1)+" / "+slides.length;
+  if(location.hash!=="#"+(cur+1)) history.replaceState(null,"","#"+(cur+1));
+}
+document.getElementById("prev").onclick=()=>go(cur-1);
+document.getElementById("next").onclick=()=>go(cur+1);
+document.addEventListener("keydown",e=>{
+  if(/INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  if(["ArrowRight","PageDown"," "].includes(e.key)){e.preventDefault();go(cur+1);}
+  if(["ArrowLeft","PageUp"].includes(e.key)){e.preventDefault();go(cur-1);}
+  if(e.key==="Home") go(0);
+  if(e.key==="End") go(slides.length-1);
+});
+document.querySelectorAll("a.jump").forEach(a=>a.onclick=()=>{
+  const t=document.getElementById(a.dataset.go); if(t) go(slides.indexOf(t.closest(".slide")));
+});
+function fit(){
+  const s=Math.min(innerWidth/1600,innerHeight/900);
+  stage.style.transform="scale("+s+")";
+}
+addEventListener("resize",fit); fit();
+const h=parseInt(location.hash.slice(1)); go(isNaN(h)?0:h-1);
+/* schema slide anchor */
+document.getElementById("schema").closest(".slide").id="s-schema";
+
+/* ===== copy ===== */
+const toast=document.getElementById("toast");
+function flash(msg){ toast.textContent=msg; toast.classList.add("show"); clearTimeout(flash.t); flash.t=setTimeout(()=>toast.classList.remove("show"),1200); }
+async function copyText(t){
+  try{ await navigator.clipboard.writeText(t); }
+  catch(e){ const ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(_){} ta.remove(); }
+  flash("已複製");
+}
+document.querySelectorAll("[data-copy]").forEach(el=>{
+  const t=COPY[el.dataset.copy];
+  el.appendChild(document.createTextNode(t));
+  el.addEventListener("click",()=>copyText(t));
+});
+document.querySelectorAll("[data-copytext]").forEach(el=>el.addEventListener("click",()=>copyText(el.dataset.copytext)));
+document.querySelectorAll("[data-cfg]").forEach(el=>el.textContent=CONFIG[el.dataset.cfg]);
+
+/* ===== wrap step text ===== */
+document.querySelectorAll("ol.steps > li").forEach(li=>{const sp=document.createElement("span");while(li.firstChild)sp.appendChild(li.firstChild);li.appendChild(sp);});
+
+/* ===== reveal ===== */
+document.querySelectorAll(".rv").forEach(el=>el.addEventListener("click",()=>el.classList.toggle("hide")));
+
+/* ===== calculator ===== */
+function calc(){
+  const v=["c1","c2","c3"].map(id=>parseFloat(document.getElementById(id).value)||0);
+  document.getElementById("cOut").textContent=(v[0]*v[1]*v[2]/60).toFixed(1);
+}
+["c1","c2","c3"].forEach(id=>document.getElementById(id).addEventListener("input",calc)); calc();
+
+/* ===== v1 / v2 ===== */
+document.querySelectorAll("#verSeg button").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll("#verSeg button").forEach(x=>x.classList.toggle("on",x===b));
+  const v2=b.dataset.v==="2";
+  document.querySelector("#verBox .v2").style.display=v2?"flex":"none";
+  document.querySelector("#verBox .v1n").textContent=v2?"虛線框是 v2 新增的節點":"v1 先確定每個人都跑得通，再往上加";
+});
+
+/* ===== checklists ===== */
+document.querySelectorAll("ul.check").forEach(ul=>{
+  const key="chk:"+ul.dataset.key; const st=store.get(key,[]);
+  [...ul.children].forEach((li,i)=>{
+    if(st[i]) li.classList.add("done");
+    li.addEventListener("click",e=>{
+      if(e.target.closest("a")) return;
+      li.classList.toggle("done");
+      store.set(key,[...ul.children].map(x=>x.classList.contains("done")));
+    });
+  });
+});
+
+/* ===== dates ===== */
+const pad=n=>String(n).padStart(2,"0");
+const fmt=d=>d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+const addDays=n=>{const d=new Date();d.setDate(d.getDate()+n);return d;};
+
+/* ===== 報工單 canvas ===== */
+(function(){
+  const c=document.getElementById("sheet"), g=c.getContext("2d");
+  function draw(){
+  g.fillStyle="#FFFDF6"; g.fillRect(0,0,1200,860);
+  g.fillStyle="#3E3A36"; g.font="900 64px 'Noto Sans TC',sans-serif"; g.textAlign="center";
+  g.fillText("生產報工單",600,100);
+  g.textAlign="left"; g.lineWidth=4; g.strokeStyle="#3E3A36";
+  const rows=[["日期",fmt(new Date())],["工單號","WO-2410-005"],["工序","鈑金折彎"],["良品數","185"],["不良數","6"],["不良原因","尺寸偏差"],["報工人","王小明"]];
+  const x0=80,y0=150,rh=96,w1=300,w2=740;
+  rows.forEach((r,i)=>{
+    const y=y0+i*rh;
+    g.strokeRect(x0,y,w1,rh); g.strokeRect(x0+w1,y,w2,rh);
+    g.fillStyle="#3E3A36"; g.font="700 44px 'Noto Sans TC',sans-serif"; g.fillText(r[0],x0+30,y+62);
+    g.save(); g.translate(x0+w1+40,y+66); g.rotate((i%2?-1:1)*0.015);
+    g.fillStyle="#3F4F7A"; g.font="500 52px 'Noto Sans TC',sans-serif"; g.fillText(r[1],0,0); g.restore();
+  });
+  }
+  draw();
+  if(document.fonts) document.fonts.ready.then(draw);
+  document.getElementById("dlSheet").onclick=()=>{
+    const a=document.createElement("a"); a.download="報工單_WO-2410-005.png"; a.href=c.toDataURL("image/png"); a.click();
+  };})();
+
+/* ===== 訂單 CSV ===== */
+(function(){
+  const head=["wo_no","customer","part_no","part_name","order_qty","due_date"];
+  const rows=ORDERS.map(o=>[o[0],o[1],o[2],o[3],o[4],fmt(addDays(o[5]))]);
+  const tb=document.getElementById("orderPreview");
+  tb.innerHTML="<tr>"+["wo_no","part_name","order_qty","due_date"].map(h=>"<th>"+h+"</th>").join("")+"</tr>"+
+    rows.slice(0,3).map(r=>"<tr><td class='m'>"+r[0]+"</td><td>"+r[3]+"</td><td class='m'>"+r[4]+"</td><td class='m'>"+r[5]+"</td></tr>").join("");
+  document.getElementById("dlCsv").onclick=()=>{
+    const csv="﻿"+[head,...rows].map(r=>r.join(",")).join("\n");
+    const a=document.createElement("a"); a.download="訂單.csv";
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})); a.click();
+  };
+})();
+
+/* ===== 報工紀錄 CSV（範例資料，日期以今天為準） ===== */
+(function(){
+  const U="U0123456789abcdef0123456789abcdef";
+  const R=[[-1,"WO-2410-001","沖壓",420,6,"毛邊","小華","text"],[-1,"WO-2410-003","CNC加工",110,1,"刮傷","阿明","text"],
+    [-1,"WO-2410-005","鈑金折彎",160,2,"尺寸偏差","王小明","image"],[0,"WO-2410-001","沖壓",480,12,"毛邊","小華","text"],
+    [0,"WO-2410-001","沖壓",220,3,"毛邊","小華","text"],[0,"WO-2410-002","鋁擠型裁切",300,0,"","阿德","text"],
+    [0,"WO-2410-003","CNC加工",120,3,"刮傷","阿明","text"],[0,"WO-2410-004","車削",350,4,"尺寸偏差","志偉","text"],
+    [0,"WO-2410-005","鈑金折彎",185,6,"尺寸偏差","王小明","image"],[0,"WO-2410-006","射出成型",900,45,"縮水","美玲","text"]];
+  const head="work_date,wo_no,process,good_qty,ng_qty,ng_reason,reporter,line_user_id,source";
+  document.getElementById("dlReport").onclick=()=>{
+    const csv="\uFEFF"+[head,...R.map(r=>[fmt(addDays(r[0])),r[1],r[2],r[3],r[4],r[5],r[6],U,r[7]].join(","))].join("\n");
+    const a=document.createElement("a"); a.download="報工紀錄.csv";
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"})); a.click();
+  };
+})();
+
+/* ===== LINE 日報示意 ===== */
+(function(){
+  const d=new Date();
+  document.getElementById("mock").innerHTML=
+    "<b>"+(d.getMonth()+1)+"/"+d.getDate()+" 生產日報</b><br>"+
+    "WO-001 馬達外殼 480 件<br>"+
+    "WO-003 齒輪座 120 件<br>"+
+    "<span style='color:#A95D53;font-weight:700'>⚠ WO-001 不良率 2.4%</span><br>"+
+    "<span style='color:#A95D53;font-weight:700'>⚠ WO-005 交期明天</span>";
+})();
+
+/* ===== 計時器 ===== */
+(function(){
+  let left=45*60, t=null; const el=document.getElementById("tm"), b=document.getElementById("tmBtn");
+  const show=()=>el.textContent=pad(Math.floor(left/60))+":"+pad(left%60);
+  b.onclick=()=>{
+    if(t){clearInterval(t);t=null;b.textContent="繼續";return;}
+    b.textContent="暫停";
+    t=setInterval(()=>{left=Math.max(0,left-1);show();if(!left){clearInterval(t);t=null;b.textContent="重來";left=45*60;}},1000);
+  };
+  show();
+})();
+
+/* ===== Prompt 產生器 ===== */
+(function(){
+  const fields=[...document.querySelectorAll("[data-g]")];
+  const saved=store.get("gen",{});
+  const val=k=>{const el=fields.find(f=>f.dataset.g===k);return el.type==="checkbox"?el.checked:el.value.trim();};
+  const fill=o=>fields.forEach(f=>{const v=o[f.dataset.g]; if(f.type==="checkbox") f.checked=!!v; else f.value=v||"";});
+  fill(saved);
+  const blank=s=>s||"（未填）";
+  function build(){
+    const tables=val("tables").split("\n").filter(Boolean).map(l=>"- "+l).join("\n")||"- （未填）";
+    return `# 角色
+你是 n8n 工作流設計專家。請依照下面的需求，產出一份可以直接貼到 n8n 畫布匯入的 workflow JSON。
+
+# 環境
+- n8n 版本：2.18.5（自架教學平台）
+- LLM：Groq（Groq Chat Model 節點，搭配 Basic LLM Chain），文字模型 ${CONFIG.textModel}
+- 資料庫：n8n Data Table
+- LINE Messaging API 一律用 HTTP Request 節點呼叫，認證使用名為「${blank(val("cred"))}」的 Header Auth 憑證
+- 時區：Asia/Taipei
+
+# 需求拆解
+- 目的：${blank(val("goal"))}
+- 觸發：${blank(val("trigger"))}
+- 輸入：${blank(val("input"))}
+- 判斷與計算：${blank(val("logic"))}
+- 交給 AI：${blank(val("ai"))}
+- 輸出：${blank(val("output"))}
+- 例外：${blank(val("edge"))}
+
+# 資料表（Data Table）
+${tables}
+
+# 限制
+- 只使用 n8n 內建節點，除非必要不要使用 Code 節點
+- 數字的計算由節點完成，AI 只負責撰寫文字
+- 每個節點用中文命名，並加一個 Sticky Note 說明整個流程
+- JSON 裡不要放任何 API Key 或 Token
+
+# 輸出
+1. 先條列說明每個節點的用途
+2. 再提供完整的 workflow JSON（放在一個程式碼區塊）
+3. 最後列出匯入後我需要手動設定的項目` + (val("example")?`
+
+# 參考範例
+下面是一份我已經能正常執行的 workflow JSON，請沿用其中的節點類型、版本與憑證寫法：
+（在這裡貼上實作一的 JSON）`:"");
+  }
+  const out=document.getElementById("genOut");
+  const render=()=>{ out.textContent=build(); const o={}; fields.forEach(f=>o[f.dataset.g]=f.type==="checkbox"?f.checked:f.value); store.set("gen",o); };
+  fields.forEach(f=>f.addEventListener("input",render));
+  document.getElementById("genSample").onclick=()=>{fill(GEN_SAMPLE);render();flash("已載入參考答案");};
+  document.getElementById("genClear").onclick=()=>{fill({});render();};
+  document.getElementById("genCopy").onclick=()=>copyText(build());
+  render();
+})();
+</script>
+</body>
+</html>
